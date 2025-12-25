@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/TechBowl-japan/go-stations/model"
 	"github.com/TechBowl-japan/go-stations/service"
@@ -16,37 +17,124 @@ type TODOHandler struct {
 }
 
 func (h *TODOHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	if r.Method != http.MethodPost && r.Method != http.MethodPut && r.Method != http.MethodGet {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		return
 	}
 
-	var req model.CreateTODORequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusBadRequest)
+	// Removed: q := r.URL.Query() as it's not used outside the GET block anymore
+
+	if r.Method == http.MethodGet {
+		prevIDStr := r.URL.Query().Get("prev_id")
+		sizeStr := r.URL.Query().Get("size")
+
+		var prevID int
+		if prevIDStr != "" {
+			var err error
+			prevID, err = strconv.Atoi(prevIDStr)
+			if err != nil {
+				log.Println(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
+		var size int
+		if sizeStr != "" {
+			var err error
+			size, err = strconv.Atoi(sizeStr)
+			if err != nil {
+				log.Println(err)
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+		}
+
+		req := &model.ReadTODORequest{
+			PrevID: prevID,
+			Size:   size,
+		}
+
+		ctx := r.Context()
+		todos, err := h.svc.ReadTODO(ctx, int64(req.PrevID), int64(req.Size))
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		response := &model.ReadTODOResponse{TODOs: todos}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		return
 	}
 
-	if req.Subject == "" {
-		w.WriteHeader(http.StatusBadRequest)
+	if r.Method == http.MethodPost {
+		var req model.CreateTODORequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		if req.Subject == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
+		ctx := r.Context()
+		todo, err := h.svc.CreateTODO(ctx, req.Subject, req.Description)
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		response := &model.CreateTODOResponse{TODO: *todo}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		return
 	}
 
-	ctx := r.Context()
-	todo, err := h.svc.CreateTODO(ctx, req.Subject, req.Description)
-	if err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+	if r.Method == http.MethodPut {
+		var req model.UpdateTODORequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
-	response := &model.CreateTODOResponse{TODO: *todo}
+		if req.Subject == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Println(err)
-		w.WriteHeader(http.StatusInternalServerError)
+		ctx := r.Context()
+		todo, err := h.svc.UpdateTODO(ctx, int64(req.ID), req.Subject, req.Description)
+		if err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		response := &model.UpdateTODOResponse{TODO: *todo}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			log.Println(err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		return
 	}
 }

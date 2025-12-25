@@ -59,7 +59,33 @@ func (s *TODOService) ReadTODO(ctx context.Context, prevID, size int64) ([]*mode
 		readWithID = `SELECT id, subject, description, created_at, updated_at FROM todos WHERE id < ? ORDER BY id DESC LIMIT ?`
 	)
 
-	return nil, nil
+	var rows *sql.Rows
+	var err error
+
+	if prevID > 0 {
+		rows, err = s.db.QueryContext(ctx, readWithID, prevID, size)
+	} else {
+		rows, err = s.db.QueryContext(ctx, read, size)
+	}
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	todos := []*model.TODO{}
+	for rows.Next() {
+		var todo model.TODO
+		if err := rows.Scan(&todo.ID, &todo.Subject, &todo.Description, &todo.CreatedAt, &todo.UpdatedAt); err != nil {
+			return nil, err
+		}
+		todos = append(todos, &todo)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return todos, nil
 }
 
 // UpdateTODO updates the TODO on DB.
@@ -69,7 +95,34 @@ func (s *TODOService) UpdateTODO(ctx context.Context, id int64, subject, descrip
 		confirm = `SELECT subject, description, created_at, updated_at FROM todos WHERE id = ?`
 	)
 
-	return nil, nil
+	result, err := s.db.ExecContext(ctx, update, subject, description, id)
+	if err != nil {
+		return nil, err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+
+	if rowsAffected == 0 {
+		return nil, &model.ErrNotFound{}
+	}
+
+	var todo model.TODO
+	err = s.db.QueryRowContext(ctx, confirm, id).Scan(
+		&todo.Subject,
+		&todo.Description,
+		&todo.CreatedAt,
+		&todo.UpdatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	todo.ID = int(id)
+
+	return &todo, nil
 }
 
 // DeleteTODO deletes TODOs on DB by ids.
