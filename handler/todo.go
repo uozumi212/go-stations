@@ -22,8 +22,6 @@ func (h *TODOHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Removed: q := r.URL.Query() as it's not used outside the GET block anymore
-
 	if r.Method == http.MethodGet {
 		prevIDStr := r.URL.Query().Get("prev_id")
 		sizeStr := r.URL.Query().Get("size")
@@ -48,6 +46,9 @@ func (h *TODOHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
+		}
+		if size == 0 {
+			size = 5
 		}
 
 		req := &model.ReadTODORequest{

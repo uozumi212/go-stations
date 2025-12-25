@@ -12,7 +12,7 @@ var schema string
 
 // NewDB returns go-sqlite3 driver based *sql.DB.
 func NewDB(path string) (*sql.DB, error) {
-	db, err := sql.Open("sqlite3", path)
+	db, err := sql.Open("sqlite3", path+"?parseTime=true&loc=Local")
 	if err != nil {
 		return nil, err
 	}
